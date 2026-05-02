@@ -43,8 +43,8 @@
             "genotypegvcf": 6
         },
         "samtools": {
-            "threads": 10,
-            "mem_gb": 40
+            "threads": 4,
+            "mem_gb": 16
         },
         "DBIimport": {
             "threads": 2,
