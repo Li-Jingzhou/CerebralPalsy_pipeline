@@ -1,5 +1,5 @@
 {
-  "data":"/home/u24111510018/fastq",
+    "data":"/home/u24111510018/GDD/fastq",
 	"output":"/home/u24111510018/GDD",
 	"fq1_suffix":"_1.fastq.gz",
 	"fq2_suffix":"_2.fastq.gz",
