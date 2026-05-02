@@ -9,11 +9,10 @@ bwa = config["software"]["bwa"]
 samtools = config["software"]["samtools"]
 gatk = config["software"]["gatk"]
 
-
-SAMPLES_fastp, =glob_wildcards(outd+"/"+config['fq_trim_dir']+"/{sample}"+config["fq1_trim_suffix"])
-SAMPLES_raw, =glob_wildcards(ind+"/{sample}"+config["fq1_suffix"])
-SAMPLES=set(SAMPLES_raw+SAMPLES_fastp)
-
+# 样本识别逻辑：取原始文件和已过滤文件的并集
+SAMPLES_fastp, = glob_wildcards(outd + "/" + config['fq_trim_dir'] + "/{sample}" + config["fq1_trim_suffix"])
+SAMPLES_raw, = glob_wildcards(ind + "/{sample}" + config["fq1_suffix"])
+SAMPLES = set(SAMPLES_raw + SAMPLES_fastp)
 #SAMPLES=SAMPLES_raw
 
 rule precalling_done:
@@ -29,23 +28,22 @@ rule bwa_map_sort:
     output:
         bam = temp(outd + "/bam/{sample}.sorted.bam")
     threads:
-        # 这里计算总线程数供 Snakemake 调度和 Slurm 申请资源
+        # 申请的总线程 = BWA线程 + Samtools线程
         config["params"]['bwa']["threads"] + config["params"]['samtools']["threads"]
     resources:
-        # 这里计算总内存供 Snakemake 调度和 Slurm 申请资源
+        # 申请的总内存 = BWA内存 + Samtools内存
         mem_gb = config["params"]['bwa']["mem_gb"] + config["params"]["samtools"]["mem_gb"]
     params:
         rg = r"@RG\tID:{sample}WES\tSM:{sample}\tLB:" + config['params']['bwa']['LB'] + r"\tPL:" + config['params']['bwa']['PL'],
-        # 将线程数提取到 params，方便 shell 调用
         bwa_threads = config["params"]['bwa']["threads"],
         sort_threads = config["params"]['samtools']["threads"],
-        # 计算每个排序线程的内存大小 (e.g., "4G")
+        # 每个排序线程分配的内存 (如 "4G")
         sort_mem = str(config["params"]["samtools"]["mem_gb"] // config["params"]['samtools']["threads"]) + "G"
     log:
         outd + "/logs/bwa_mem/{sample}.log"
     shell:
         """
-        # 使用 ({...}) 确保整个管道的输出和错误都被捕获到 log
+        # 使用 params 中定义的变量，避免 shell 解析 config 字典报错
         ({bwa} mem -t {params.bwa_threads} -R '{params.rg}' {genome} {input.R1} {input.R2} | \
         {samtools} sort -@ {params.sort_threads} -m {params.sort_mem} -o {output.bam} -T {output.bam}.tmp -) 2>{log}
         """
