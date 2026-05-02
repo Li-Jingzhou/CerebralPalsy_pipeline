@@ -1,8 +1,8 @@
 {
     "data": "/home/u24111510018/GDD/fastq",
     "output": "/home/u24111510018/GDD",
-    "fq1_suffix": "_1.fastq.gz",
-    "fq2_suffix": "_2.fastq.gz",
+    "fq1_suffix": "_1.fq.gz",
+    "fq2_suffix": "_2.fq.gz",
     "fq_trim_dir": "fastp",
     "fq1_trim_suffix": ".R1.fq.gz",
     "fq2_trim_suffix": ".R2.fq.gz",
