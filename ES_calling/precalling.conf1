@@ -9,7 +9,6 @@ bwa = config["software"]["bwa"]
 samtools = config["software"]["samtools"]
 gatk = config["software"]["gatk"]
 
-# --- 修复 SAMPLES 逻辑：确保新样本和旧样本都能被识别 ---
 S_RAW, = glob_wildcards(ind + "/{sample}" + config["fq1_suffix"])
 S_FASTP, = glob_wildcards(outd + "/" + config['fq_trim_dir'] + "/{sample}" + config["fq1_trim_suffix"])
 S_BAM, = glob_wildcards(outd + "/bam/{sample}.sorted.bam")
@@ -21,7 +20,6 @@ rule precalling_done:
     output:
         touch(outd + "/preprocessing.done")
 
-# --- 优化：管道合并 BWA mem 和 Samtools sort ---
 rule bwa_map_sort:
     input:
         R1 = outd + "/" + config['fq_trim_dir'] + "/{sample}" + config["fq1_trim_suffix"],
