@@ -13,13 +13,8 @@ gatk = config["software"]["gatk"]
 SAMPLES_fastp, =glob_wildcards(outd+"/"+config['fq_trim_dir']+"/{sample}"+config["fq1_trim_suffix"])
 SAMPLES_raw, =glob_wildcards(ind+"/{sample}"+config["fq1_suffix"])
 SAMPLES=set(SAMPLES_raw+SAMPLES_fastp)
-SAMPLES,=glob_wildcards(outd+"/bam"+"/{sample}.sorted.bam")
-#SAMPLES=SAMPLES_raw
 
-S_RAW, = glob_wildcards(ind + "/{sample}" + config["fq1_suffix"])
-S_FASTP, = glob_wildcards(outd + "/" + config['fq_trim_dir'] + "/{sample}" + config["fq1_trim_suffix"])
-S_BAM, = glob_wildcards(outd + "/bam/{sample}.sorted.bam")
-SAMPLES = set(S_RAW + S_FASTP + S_BAM)
+#SAMPLES=SAMPLES_raw
 
 rule precalling_done:
     input:
@@ -32,12 +27,10 @@ rule bwa_map_sort:
         R1 = outd + "/" + config['fq_trim_dir'] + "/{sample}" + config["fq1_trim_suffix"],
         R2 = outd + "/" + config['fq_trim_dir'] + "/{sample}" + config["fq2_trim_suffix"]
     output:
-        # 管道直接输出排序好的 BAM，所以这里设为 temp
         bam = temp(outd + "/bam/{sample}.sorted.bam")
     threads:
-        config["params"]['bwa']["threads"] + 2 # 为 samtools sort 预留 2 个线程
+        config["params"]['bwa']["threads"] + config["params"]['samtools']["threads"]
     resources:
-        # 建议总内存 = BWA内存 + Samtools sort内存
         mem_gb = config["params"]['bwa']["mem_gb"] + config["params"]["samtools"]["mem_gb"]
     params:
         rg = r"@RG\tID:{sample}WES\tSM:{sample}\tLB:" + config['params']['bwa']['LB'] + r"\tPL:" + config['params']['bwa']['PL'],
@@ -47,7 +40,7 @@ rule bwa_map_sort:
         outd + "/logs/bwa_mem/{sample}.log"
     shell:
         """
-        ({bwa} mem -t {threads} -R '{params.rg}' {genome} {input.R1} {input.R2} | \
+        ({bwa} mem -t 8 -R '{params.rg}' {genome} {input.R1} {input.R2} | \
         {samtools} sort -@ 4 -m {params.sort_mem} -o {output.bam} -T {output.bam}.tmp -) 2>{log}
         """
 
