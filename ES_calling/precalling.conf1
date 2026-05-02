@@ -9,6 +9,13 @@ bwa = config["software"]["bwa"]
 samtools = config["software"]["samtools"]
 gatk = config["software"]["gatk"]
 
+
+SAMPLES_fastp, =glob_wildcards(outd+"/"+config['fq_trim_dir']+"/{sample}"+config["fq1_trim_suffix"])
+SAMPLES_raw, =glob_wildcards(ind+"/{sample}"+config["fq1_suffix"])
+SAMPLES=set(SAMPLES_raw+SAMPLES_fastp)
+SAMPLES,=glob_wildcards(outd+"/bam"+"/{sample}.sorted.bam")
+#SAMPLES=SAMPLES_raw
+
 S_RAW, = glob_wildcards(ind + "/{sample}" + config["fq1_suffix"])
 S_FASTP, = glob_wildcards(outd + "/" + config['fq_trim_dir'] + "/{sample}" + config["fq1_trim_suffix"])
 S_BAM, = glob_wildcards(outd + "/bam/{sample}.sorted.bam")
@@ -46,7 +53,6 @@ rule bwa_map_sort:
 
 rule gatk_markdup:
     input:
-        # 这里引用合并后的输出
         rules.bwa_map_sort.output.bam
     output:
         bam = outd + "/bam/{sample}.sorted.markdup.bam",
