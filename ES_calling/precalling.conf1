@@ -1,0 +1,78 @@
+configfile: "config.json"
+include: "trimfastq.conf"
+
+genome = config["reference"]["genome"]
+ind = config['data']
+outd = config['output']
+
+bwa = config["software"]["bwa"]
+samtools = config["software"]["samtools"]
+gatk = config["software"]["gatk"]
+
+# --- 修复 SAMPLES 逻辑：确保新样本和旧样本都能被识别 ---
+S_RAW, = glob_wildcards(ind + "/{sample}" + config["fq1_suffix"])
+S_FASTP, = glob_wildcards(outd + "/" + config['fq_trim_dir'] + "/{sample}" + config["fq1_trim_suffix"])
+S_BAM, = glob_wildcards(outd + "/bam/{sample}.sorted.bam")
+SAMPLES = set(S_RAW + S_FASTP + S_BAM)
+
+rule precalling_done:
+    input:
+        expand(outd + "/bam/{sample}.sorted.markdup.bam", sample=SAMPLES)
+    output:
+        touch(outd + "/preprocessing.done")
+
+# --- 优化：管道合并 BWA mem 和 Samtools sort ---
+rule bwa_map_sort:
+    input:
+        R1 = outd + "/" + config['fq_trim_dir'] + "/{sample}" + config["fq1_trim_suffix"],
+        R2 = outd + "/" + config['fq_trim_dir'] + "/{sample}" + config["fq2_trim_suffix"]
+    output:
+        # 管道直接输出排序好的 BAM，所以这里设为 temp
+        bam = temp(outd + "/bam/{sample}.sorted.bam")
+    threads:
+        config["params"]['bwa']["threads"] + 2 # 为 samtools sort 预留 2 个线程
+    resources:
+        # 建议总内存 = BWA内存 + Samtools sort内存
+        mem_gb = config["params"]['bwa']["mem_gb"] + config["params"]["samtools"]["mem_gb"]
+    params:
+        rg = r"@RG\tID:{sample}WES\tSM:{sample}\tLB:" + config['params']['bwa']['LB'] + r"\tPL:" + config['params']['bwa']['PL'],
+        # 计算 samtools sort 每个线程可用的内存 (假设分配给 sort 4个线程)
+        sort_mem = str(config["params"]["samtools"]["mem_gb"] // 4) + "G"
+    log:
+        outd + "/logs/bwa_mem/{sample}.log"
+    shell:
+        """
+        ({bwa} mem -t {threads} -R '{params.rg}' {genome} {input.R1} {input.R2} | \
+        {samtools} sort -@ 4 -m {params.sort_mem} -o {output.bam} -T {output.bam}.tmp -) 2>{log}
+        """
+
+rule gatk_markdup:
+    input:
+        # 这里引用合并后的输出
+        rules.bwa_map_sort.output.bam
+    output:
+        bam = outd + "/bam/{sample}.sorted.markdup.bam",
+        bai = outd + "/bam/{sample}.sorted.markdup.bai",
+        txt = outd + "/bam/{sample}.markdup_metrics.txt"
+    threads:
+        config["params"]["gatk"]["markdup_threads"]
+    resources:
+        mem_gb = config["params"]["gatk"]["markdup_mem_gb"]
+    params:
+        rmdup = config["params"]["gatk"]["rmdup"],
+        opt_dist = 2500
+    log:
+        outd + "/logs/gatk_markdup/{sample}.log"
+    benchmark:
+        outd + "/benchmarks/{sample}.gatk_markdup.txt"
+    shell:
+        """
+        ({gatk} --java-options '-Xmx24G -XX:+UseParallelGC -XX:ParallelGCThreads={threads}' MarkDuplicates \
+            -I {input} \
+            -O {output.bam} \
+            -M {output.txt} \
+            --OPTICAL_DUPLICATE_DISTANCE {params.opt_dist} \
+            --CREATE_INDEX true \
+            --VALIDATION_STRINGENCY SILENT \
+            --REMOVE_SEQUENCING_DUPLICATES {params.rmdup}) 2>{log}
+        """
