@@ -1,63 +1,63 @@
 {
-    "data":"/home/u24111510018/GDD/fastq",
-	"output":"/home/u24111510018/GDD",
-	"fq1_suffix":"_1.fastq.gz",
-	"fq2_suffix":"_2.fastq.gz",
-	"fq_trim_dir":"fastp",
-	"fq1_trim_suffix":".R1.fq.gz",
-	"fq2_trim_suffix":".R2.fq.gz",
-	"single_gvcf_suffix":".g.vcf.gz",
-	"reference":{
-    	"genome": "/home/u24111510018/reference/hg38/Homo_sapiens_assembly38.fasta",
-		"db157": "/home/u24111510018/reference/hg38/dbsnp/dbSNP157_hg38_renamed.vcf.gz",
-    	"g1k": "/home/u24111510018/reference/gatk_hg38_database/1000G_phase1.snps.high_confidence.hg38.vcf.gz",
-		"m1kg": "/home/u24111510018/reference/gatk_hg38_database/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
-    	"V6": "/home/u24111510018/reference/hg38/V6_hg38.bed"
-	},
-	"software": {
-    	"bwa":"/home/public/software/miniconda2/bin/bwa",
-    	"gatk":"/home/public/software/miniconda2/bin/gatk",
-    	"samtools":"/home/public/software/miniconda2/bin/samtools",
-    	"bcftools":"/home/u24111510018/software/bcftools",
-    	"fastp":"/home/public/software/miniconda2/bin/fastp"
-  },
-	"params":{
-  		"fastp":{
-			"threads": 4,
-    		"mem_gb": 4
-		},
-		"bwa":{
-			"threads": 8,
-   		 	"mem_gb": 32,
-			"LB":"WES",
-			"PL":"Illumina"
-		},
-		"gatk":{
-			"rmdup":false,
-			"markdup_threads":6,
-   			"markdup_mem_gb":32,
-			"baserecalibrator_threads":6,
-			"applybqsr_threads":6
-			"hc_threads":10,
-			"combinegvcf":6,
-			"genotypegvcf":6
-		},
-		"samtools":{
-    		"threads": 10,
-	    	"mem_gb": 40
-		}
-		"DBIimport":{
-    		"threads": 2,
-  			"mem_gb": 16,
-    		"batchsize": 100
-		},
-		"Genotype":{
-			"threads": 2,
-			"mem_gb": 4
-		},
-		"bcftools_concat":{
-			"threads": 8,
-			"mem_gb": 4
-		}
-  }
+    "data": "/home/u24111510018/GDD/fastq",
+    "output": "/home/u24111510018/GDD",
+    "fq1_suffix": "_1.fastq.gz",
+    "fq2_suffix": "_2.fastq.gz",
+    "fq_trim_dir": "fastp",
+    "fq1_trim_suffix": ".R1.fq.gz",
+    "fq2_trim_suffix": ".R2.fq.gz",
+    "single_gvcf_suffix": ".g.vcf.gz",
+    "reference": {
+        "genome": "/home/u24111510018/reference/hg38/Homo_sapiens_assembly38.fasta",
+        "db157": "/home/u24111510018/reference/hg38/dbsnp/dbSNP157_hg38_renamed.vcf.gz",
+        "g1k": "/home/u24111510018/reference/gatk_hg38_database/1000G_phase1.snps.high_confidence.hg38.vcf.gz",
+        "m1kg": "/home/u24111510018/reference/gatk_hg38_database/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
+        "V6": "/home/u24111510018/reference/hg38/V6_hg38.bed"
+    },
+    "software": {
+        "bwa": "/home/public/software/miniconda2/bin/bwa",
+        "gatk": "/home/public/software/miniconda2/bin/gatk",
+        "samtools": "/home/public/software/miniconda2/bin/samtools",
+        "bcftools": "/home/u24111510018/software/bcftools",
+        "fastp": "/home/public/software/miniconda2/bin/fastp"
+    },
+    "params": {
+        "fastp": {
+            "threads": 4,
+            "mem_gb": 4
+        },
+        "bwa": {
+            "threads": 8,
+            "mem_gb": 32,
+            "LB": "WES",
+            "PL": "Illumina"
+        },
+        "gatk": {
+            "rmdup": false,
+            "markdup_threads": 6,
+            "markdup_mem_gb": 32,
+            "baserecalibrator_threads": 6,
+            "applybqsr_threads": 6,
+            "hc_threads": 10,
+            "combinegvcf": 6,
+            "genotypegvcf": 6
+        },
+        "samtools": {
+            "threads": 10,
+            "mem_gb": 40
+        },
+        "DBIimport": {
+            "threads": 2,
+            "mem_gb": 16,
+            "batchsize": 100
+        },
+        "Genotype": {
+            "threads": 2,
+            "mem_gb": 4
+        },
+        "bcftools_concat": {
+            "threads": 8,
+            "mem_gb": 4
+        }
+    }
 }
