@@ -37,8 +37,11 @@
             "markdup_threads": 6,
             "markdup_mem_gb": 32,
             "baserecalibrator_threads": 6,
+            "baserecalibrator_mem_gb": 6,
             "applybqsr_threads": 6,
+            "applybqsr_mem_gb": 6,
             "hc_threads": 10,
+            "hc_mem_gb": 10,
             "combinegvcf": 6,
             "genotypegvcf": 6
         },
