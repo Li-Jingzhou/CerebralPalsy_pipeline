@@ -8,6 +8,8 @@
     "fq2_trim_suffix": ".R2.fq.gz",
     "single_gvcf_suffix": ".g.vcf.gz",
     "single_vcf_suffix": ".vcf.gz",
+    "combine_g_vcf": "GDD_samples_combined.g.vcf.gz",
+    "combine_vcf": "GDD_samples_combined.vcf.gz",
     "reference": {
         "genome": "/home/u24111510018/reference/hg38/Homo_sapiens_assembly38.fasta",
         "db157": "/home/u24111510018/reference/hg38/dbsnp/dbSNP157_hg38_renamed.vcf.gz",
