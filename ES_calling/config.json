@@ -12,7 +12,7 @@
     "combine_vcf": "GDD_samples_combined.vcf.gz",
     "reference": {
         "genome": "/home/u24111510018/reference/hg38/Homo_sapiens_assembly38.fasta",
-        "db157": "/home/u24111510018/reference/hg38/dbsnp/dbSNP157_hg38_renamed.vcf.gz",
+        "db157": "/home/u24111510018/reference/dbsnp/dbSNP157_hg38_renamed.vcf.gz",
         "g1k": "/home/u24111510018/reference/gatk_hg38_database/1000G_phase1.snps.high_confidence.hg38.vcf.gz",
         "m1kg": "/home/u24111510018/reference/gatk_hg38_database/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
         "V6": "/home/u24111510018/reference/hg38/v6_padded.bed",
