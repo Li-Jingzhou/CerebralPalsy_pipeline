@@ -22,9 +22,17 @@ SAMPLES_bam, = glob_wildcards(outd + "/bam/{sample}.sorted.markdup.bam")
 SAMPLES_bqsr_bam, = glob_wildcards(outd + "/bam/{sample}.sorted.markdup.BQSR.bam")
 SAMPLES_fastp, = glob_wildcards(outd + "/" + config['fq_trim_dir'] + "/{sample}" + config["fq1_trim_suffix"])
 SAMPLES_raw, = glob_wildcards(ind + "/{sample}" + config["fq1_suffix"])
-SAMPLES = set(SAMPLES_fastp + SAMPLES_raw + SAMPLES_bam + SAMPLES_bqsr_bam)
+SAMPLES_gvcf, = glob_wildcards(outd + "/gvcf/{sample}" + config['single_gvcf_suffix'])
+
+SAMPLES = set(SAMPLES_raw + SAMPLES_fastp + SAMPLES_bam + SAMPLES_bqsr_bam + SAMPLES_gvcf)
 #SAMPLES=SAMPLES_raw
 
+
+rule gatk_combine_done:
+    input:
+        outd + "/" + config["combine_vcf"]
+    output:
+        touch(outd + "/gatk.combine.done")
 
 rule gatk_single_done:
     input:
@@ -207,4 +215,72 @@ rule gatk_hc:
             -G StandardHCAnnotation \
             --native-pair-hmm-threads {threads} \
             -stand-call-conf 10) 2>{log}
+        """
+
+rule make_gvcf_list:
+    input:
+        vcf_files = expand(outd + "/gvcf/{sample}" + config['single_gvcf_suffix'], sample=SAMPLES)
+    output:
+        temp(outd + "/gvcf.list")
+    threads:
+        config['params']['fastp']['threads']
+    resources:
+        mem_gb = config["params"]["fastp"]["mem_gb"]
+    run:
+        with open(output[0], 'w') as ot:
+            for vcf in input.vcf_files:
+                ot.write(vcf + "\n")
+
+rule gatk_CombineGVCFs:
+    input:
+        gvcf_list = rules.make_gvcf_list.output
+    output:
+        outd + "/" + config["combine_g_vcf"]
+    threads:
+        config['params']['gatk']['combinegvcf_threads']
+    resources:
+        mem_gb = config["params"]["gatk"]["combinegvcf_mem_gb"]
+    log:
+        outd + "/logs/gatk_combine.log"
+    benchmark:
+        outd + "/benchmarks/gatk_combine.txt"
+    shell:
+        """
+        ({gatk} --java-options '-Xmx230G -XX:+UseParallelGC -XX:ParallelGCThreads={threads}' \
+            CombineGVCFs \
+            -V {input.gvcf_list} \
+            -R {genome} \
+            -O {output} \
+            -G StandardAnnotation \
+            -G StandardHCAnnotation \
+            -D {dbsnp} \
+            --interval-padding 100 \
+            -L {IDTv1}) 2>{log}
+        """
+
+rule gatk_GenotypeGVCFs:
+    input:
+        vcf = rules.gatk_CombineGVCFs.output
+    output:
+        outd + "/" + config["combine_vcf"]
+    threads:
+        config['params']['gatk']['genotypegvcf_threads']
+    resources:
+        mem_gb = config["params"]["gatk"]["genotypegvcf_mem_gb"]
+    log:
+        outd + "/logs/gatk_genotype.log"
+    benchmark:
+        outd + "/benchmarks/gatk_genotype.txt"
+    shell:
+        """
+        ({gatk} --java-options '-Xmx230G -XX:+UseParallelGC -XX:ParallelGCThreads={threads}' \
+            GenotypeGVCFs \
+            -V {input.vcf} \
+            -R {genome} \
+            -O {output} \
+            -D {dbsnp} \
+            -G StandardAnnotation \
+            -G StandardHCAnnotation \
+            --interval-padding 100 \
+            -L {IDTv1}) 2>{log}
         """
