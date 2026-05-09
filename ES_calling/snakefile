@@ -1,0 +1,286 @@
+configfile: "config.json"
+
+genome=config["reference"]["genome"]
+
+ind=config['data']
+outd=config['output']
+
+trim_dir=config['fq_trim_dir']
+dbsnp = config["reference"]["db157"]
+G1k = config["reference"]["g1k"]
+m1kg = config["reference"]["m1kg"]
+v6 = config["reference"]["V6"]
+IDTv1 = config["reference"]["IDTv1"]
+
+samtools=config["software"]["samtools"]
+fastp=config["software"]["fastp"]
+bwa = config["software"]["bwa"]
+gatk = config["software"]["gatk"]
+
+# 样本识别逻辑：涵盖了从原始数据到中间产物的所有可能状态
+SAMPLES_bam, = glob_wildcards(outd + "/bam/{sample}.sorted.markdup.bam")
+SAMPLES_bqsr_bam, = glob_wildcards(outd + "/bam/{sample}.sorted.markdup.BQSR.bam")
+SAMPLES_fastp, = glob_wildcards(outd + "/" + config['fq_trim_dir'] + "/{sample}" + config["fq1_trim_suffix"])
+SAMPLES_raw, = glob_wildcards(ind + "/{sample}" + config["fq1_suffix"])
+SAMPLES_gvcf, = glob_wildcards(outd + "/gvcf/{sample}" + config['single_gvcf_suffix'])
+
+SAMPLES = set(SAMPLES_raw + SAMPLES_fastp + SAMPLES_bam + SAMPLES_bqsr_bam + SAMPLES_gvcf)
+#SAMPLES=SAMPLES_raw
+
+
+rule gatk_combine_done:
+    input:
+        outd + "/" + config["combine_vcf"]
+    output:
+        touch(outd + "/gatk.combine.done")
+
+rule gatk_single_done:
+    input:
+        expand(outd + "/gvcf/{sample}" + config["single_gvcf_suffix"], sample=SAMPLES)
+    output:
+        touch(outd + "/gatk.single.done")
+
+
+rule trim_done:
+    input:
+        expand(outd + "/" + trim_dir + "/{sample}" + config["fq1_trim_suffix"], sample=SAMPLES),
+        expand(outd + "/" + trim_dir + "/{sample}" + config["fq2_trim_suffix"], sample=SAMPLES)
+    output:
+        touch(outd + "/fastp_trim.done")
+
+rule precalling_done:
+    input:
+        expand(outd + "/bam/{sample}.sorted.markdup.bam", sample=SAMPLES)
+    output:
+        touch(outd + "/preprocessing.done")
+
+rule fastp_trim:
+    input:
+        R1 = ind + "/{sample}" + config["fq1_suffix"],
+        R2 = ind + "/{sample}" + config["fq2_suffix"]
+    output:
+        r1 = temp(outd + "/" + trim_dir + "/{sample}" + config["fq1_trim_suffix"]),
+        r2 = temp(outd + "/" + trim_dir + "/{sample}" + config["fq2_trim_suffix"]),
+        jf = outd + "/" + trim_dir + "/{sample}.json",
+        hf = outd + "/" + trim_dir + "/{sample}.html"
+    threads:
+        config["params"]["fastp"]["threads"]
+    resources:
+        mem_gb = config["params"]["fastp"]["mem_gb"]
+    log:
+        outd + "/logs/fastp_trim/{sample}.log"
+    benchmark:
+        outd + "/benchmarks/{sample}.fastp_trim.txt"
+    shell:
+        """
+        ({fastp} -i {input.R1} -I {input.R2} -o {output.r1} -O {output.r2} \
+        -h {output.hf} -j {output.jf} -w {threads}) 2>{log}
+        """
+
+
+rule bwa_map_sort:
+    input:
+        R1 = outd + "/" + config['fq_trim_dir'] + "/{sample}" + config["fq1_trim_suffix"],
+        R2 = outd + "/" + config['fq_trim_dir'] + "/{sample}" + config["fq2_trim_suffix"]
+    output:
+        bam = temp(outd + "/bam/{sample}.sorted.bam")
+    threads:
+        # 申请的总线程 = BWA线程 + Samtools线程
+        config["params"]['bwa']["threads"] + config["params"]['samtools']["threads"]
+    resources:
+        # 申请的总内存 = BWA内存 + Samtools内存
+        mem_gb = config["params"]['bwa']["mem_gb"] + config["params"]["samtools"]["mem_gb"]
+    params:
+        rg = r"@RG\tID:{sample}WES\tSM:{sample}\tLB:" + config['params']['bwa']['LB'] + r"\tPL:" + config['params']['bwa']['PL'],
+        bwa_threads = config["params"]['bwa']["threads"],
+        sort_threads = config["params"]['samtools']["threads"],
+        # 每个排序线程分配的内存 (如 "4G")
+        sort_mem = str(config["params"]["samtools"]["mem_gb"] // config["params"]['samtools']["threads"]) + "G"
+    log:
+        outd + "/logs/bwa_mem/{sample}.log"
+    shell:
+        """
+        # 使用 params 中定义的变量，避免 shell 解析 config 字典报错
+        ({bwa} mem -t {params.bwa_threads} -R '{params.rg}' {genome} {input.R1} {input.R2} | \
+        {samtools} sort -@ {params.sort_threads} -m {params.sort_mem} -o {output.bam} -T {output.bam}.tmp -) 2>{log}
+        """
+
+rule gatk_markdup:
+    input:
+        rules.bwa_map_sort.output.bam
+    output:
+        bam = temp(outd + "/bam/{sample}.sorted.markdup.bam"),
+        bai = temp(outd + "/bam/{sample}.sorted.markdup.bai"),
+        txt = outd + "/bam/{sample}.markdup_metrics.txt"
+    threads:
+        config["params"]["gatk"]["markdup_threads"]
+    resources:
+        mem_gb = config["params"]["gatk"]["markdup_mem_gb"]
+    params:
+        rmdup = config["params"]["gatk"]["rmdup"],
+    log:
+        outd + "/logs/gatk_markdup/{sample}.log"
+    benchmark:
+        outd + "/benchmarks/{sample}.gatk_markdup.txt"
+    shell:
+        """
+        ({gatk} --java-options '-Xmx24G -XX:+UseParallelGC -XX:ParallelGCThreads={threads}' MarkDuplicates \
+            -I {input} \
+            -O {output.bam} \
+            -M {output.txt} \
+            --CREATE_INDEX true \
+            --VALIDATION_STRINGENCY SILENT \
+            --REMOVE_SEQUENCING_DUPLICATES {params.rmdup}) 2>{log}
+        """
+
+
+rule gatk_BaseRecalibrator:
+    input:
+        bam = rules.gatk_markdup.output.bam,
+        bai = rules.gatk_markdup.output.bai
+    output:
+        outd + "/bam/recal_{sample}WES.table"
+    log:
+        outd + "/logs/gatk_baserecalibrator/{sample}.log"
+    benchmark:
+        outd + "/benchmarks/{sample}.gatk_baserecalibrator.txt"
+    threads:
+        config["params"]["gatk"]["baserecalibrator_threads"]
+    resources:
+        mem_gb = config["params"]["gatk"]["baserecalibrator_mem_gb"]
+    shell:
+        """
+        ({gatk} --java-options '-Xmx20G -XX:+UseParallelGC -XX:ParallelGCThreads={threads}' \
+            BaseRecalibrator \
+            -R {genome} \
+            -I {input.bam} \
+            -O {output} \
+            --known-sites {dbsnp} \
+            --known-sites {G1k} \
+            --known-sites {m1kg}) 2> {log}
+        """
+
+rule gatk_ApplyBQSR:
+    input:
+        bam = rules.gatk_markdup.output.bam,
+        table = rules.gatk_BaseRecalibrator.output
+    output:
+        outd + "/bam/{sample}.sorted.markdup.BQSR.bam"
+    log:
+        outd + "/logs/gatk_applyBQSR/{sample}.log"
+    benchmark:
+        outd + "/benchmarks/{sample}.gatk_applyBQSR.txt"
+    threads:
+        config["params"]["gatk"]["applybqsr_threads"]
+    resources:
+        mem_gb = config["params"]["gatk"]["applybqsr_mem_gb"]
+    shell:
+        """
+        ({gatk} --java-options '-Xmx20G -XX:+UseParallelGC -XX:ParallelGCThreads={threads}' \
+            ApplyBQSR \
+            --bqsr-recal-file {input.table} \
+            -R {genome} \
+            -I {input.bam} \
+            -O {output}) 2>{log}
+        
+        # 按用户要求，手动清理中间文件
+        rm -rf {outd}/bam/{wildcards.sample}.sorted.markdup.bam
+        """
+
+rule gatk_hc:
+    input:
+        bam = rules.gatk_ApplyBQSR.output
+    output:
+        outd + "/gvcf/{sample}" + config["single_gvcf_suffix"]
+    threads:
+        config["params"]["gatk"]["hc_threads"]
+    resources:
+        mem_gb = config["params"]["gatk"]["hc_mem_gb"]
+    log:
+        outd + "/logs/gatk_hc/{sample}.log"
+    benchmark:
+        outd + "/benchmarks/{sample}.gatk_hc.txt"
+    shell:
+        """
+        ({gatk} --java-options '-Xmx24G -XX:+UseParallelGC -XX:ParallelGCThreads={threads}' \
+            HaplotypeCaller \
+            -I {input.bam} \
+            -O {output} \
+            -R {genome} \
+            -D {dbsnp} \
+            -L {IDTv1} \
+            --interval-padding 100 \
+            -ERC GVCF \
+            -G StandardAnnotation \
+            -G StandardHCAnnotation \
+            --native-pair-hmm-threads {threads} \
+            -stand-call-conf 10) 2>{log}
+        """
+
+rule make_gvcf_list:
+    input:
+        vcf_files = expand(outd + "/gvcf/{sample}" + config['single_gvcf_suffix'], sample=SAMPLES)
+    output:
+        temp(outd + "/gvcf.list")
+    threads:
+        config['params']['fastp']['threads']
+    resources:
+        mem_gb = config["params"]["fastp"]["mem_gb"]
+    run:
+        with open(output[0], 'w') as ot:
+            for vcf in input.vcf_files:
+                ot.write(vcf + "\n")
+
+rule gatk_CombineGVCFs:
+    input:
+        gvcf_list = rules.make_gvcf_list.output
+    output:
+        outd + "/" + config["combine_g_vcf"]
+    threads:
+        config['params']['gatk']['combinegvcf_threads']
+    resources:
+        mem_gb = config["params"]["gatk"]["combinegvcf_mem_gb"]
+    log:
+        outd + "/logs/gatk_combine.log"
+    benchmark:
+        outd + "/benchmarks/gatk_combine.txt"
+    shell:
+        """
+        ({gatk} --java-options '-Xmx230G -XX:+UseParallelGC -XX:ParallelGCThreads={threads}' \
+            CombineGVCFs \
+            -V {input.gvcf_list} \
+            -R {genome} \
+            -O {output} \
+            -G StandardAnnotation \
+            -G StandardHCAnnotation \
+            -D {dbsnp} \
+            --interval-padding 100 \
+            -L {IDTv1}) 2>{log}
+        """
+
+rule gatk_GenotypeGVCFs:
+    input:
+        vcf = rules.gatk_CombineGVCFs.output
+    output:
+        outd + "/" + config["combine_vcf"]
+    threads:
+        config['params']['gatk']['genotypegvcf_threads']
+    resources:
+        mem_gb = config["params"]["gatk"]["genotypegvcf_mem_gb"]
+    log:
+        outd + "/logs/gatk_genotype.log"
+    benchmark:
+        outd + "/benchmarks/gatk_genotype.txt"
+    shell:
+        """
+        ({gatk} --java-options '-Xmx230G -XX:+UseParallelGC -XX:ParallelGCThreads={threads}' \
+            GenotypeGVCFs \
+            -V {input.vcf} \
+            -R {genome} \
+            -O {output} \
+            -D {dbsnp} \
+            -G StandardAnnotation \
+            -G StandardHCAnnotation \
+            --interval-padding 100 \
+            -L {IDTv1}) 2>{log}
+        """
