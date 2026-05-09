@@ -207,8 +207,7 @@ rule gatk_hc:
 
 rule make_gvcf_list:
     input:
-        vcf_files = expand(outd + "/gvcf/{sample}" + config['single_gvcf_suffix'], sample=SAMPLES),
-        vcfs = expand(outd + "/gvcf/{sample}" + config['single_gvcf_suffix'], sample=SAMPLES)
+        vcf_files = expand(outd + "/gvcf/{sample}" + config['single_gvcf_suffix'], sample=SAMPLES)
     output:
         temp(outd + "/gvcf.list")
     threads:
